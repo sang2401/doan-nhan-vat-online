@@ -33,6 +33,7 @@ const student=params.has('room');let room=params.get('room')||'';
 const hostToken=student?'':(sessionStorage.getItem('hostToken')||crypto.randomUUID());
 if(!student)sessionStorage.setItem('hostToken',hostToken);
 let state=null, musicIndex=-1;
+let ownResult=null; let ownQuestion=-1;
 const asset=(idx,kind)=>kind==='mp3'?'/assets/'+keys[idx]+'_mp3.mp3':embeddedImages[keys[idx]+'_'+kind];
 function stopMusic(){const a=$('music');a.pause();a.removeAttribute('src');a.load();$('toggle').classList.add('hidden');musicIndex=-1}
 function playMusic(idx){if(idx===musicIndex)return;stopMusic();musicIndex=idx;const a=$('music');a.src=asset(idx,'mp3');a.loop=true;a.play().catch(()=>{});$('toggle').classList.remove('hidden')}
@@ -44,11 +45,37 @@ function draw(s){state=s;room=s.room;$('roomnum').textContent=room;const link=lo
  else{$('progress').textContent='Câu '+(q+1)+'/4';$('stageSub').textContent=s.revealed?'🎉 Đã mở đáp án':'⏳ Có 30 giây để trả lời';$('character').src=asset(q,s.revealed?'original':'shadow');$('answerName').textContent=s.revealed?'🎉 Đáp án: '+names[q]:'Đây là nhân vật nào?';$('next').disabled=!s.revealed;$('next').textContent=q===3?'🔁 Chơi lại':'➡ Câu tiếp theo';$('message').textContent=s.revealed?(q===3?'Đã hoàn thành 4/4 câu! Bấm Chơi lại để quay về màn hình Bắt đầu.':'Nhạc phát đến khi chuyển câu tiếp theo.'):'Mỗi bạn có 30 giây để trả lời, không bị khóa vì bạn khác chọn trước.';if(s.revealed)playMusic(q);else stopMusic()}
  if(student)drawStudent(s);
 }
-function drawStudent(s){$('studentJoin').classList.add('hidden');$('studentGame').classList.remove('hidden');const me=s.players.find(p=>p.id===socket.id);$('studentScore').textContent=me?'Điểm: '+me.score:'';
- const q=s.question;if(q<0){$('studentStatus').textContent='Chờ giáo viên bắt đầu...';$('studentImage').src=asset(0,'shadow');$('studentChoices').innerHTML='';$('studentMessage').textContent='';return}
- $('studentStatus').textContent='Câu '+(q+1)+'/4 · 30 giây';$('studentImage').src=asset(q,s.revealed?'original':'shadow');$('studentChoices').innerHTML=names.map((n,i)=>`<button class="choice" data-answer="${i}" ${s.revealed||me?.answered?'disabled':''}>${'ABCD'[i]}. ${n}</button>`).join('');document.querySelectorAll('#studentChoices button').forEach(b=>b.onclick=()=>socket.emit('answer',{room,answer:Number(b.dataset.answer)}));$('studentMessage').textContent=s.revealed?(q===3?'Đáp án: '+names[q]+' · Đã hoàn thành! Chờ giáo viên bấm Chơi lại.':'Đáp án: '+names[q]):(me?.answered?'Đã ghi nhận câu trả lời. Chờ hết giờ để xem đáp án.':'Hãy chọn đáp án trước khi hết 30 giây!');if(s.revealed)playMusic(q);else stopMusic();}
+function drawStudent(s){
+ $('studentJoin').classList.add('hidden');$('studentGame').classList.remove('hidden');
+ const me=s.players.find(p=>p.id===socket.id);
+ $('studentScore').textContent=me?'Điểm: '+me.score:'';
+ const q=s.question;
+ if(q!==ownQuestion){ownQuestion=q;ownResult=null;}
+ if(q<0){$('studentStatus').textContent='Chờ giáo viên bắt đầu...';$('studentImage').src=asset(0,'shadow');$('studentChoices').innerHTML='';$('studentMessage').textContent='';stopMusic();return;}
+ const myReveal=Boolean(ownResult && ownResult.question===q);
+ const visible=s.revealed||myReveal;
+ $('studentStatus').textContent='Câu '+(q+1)+'/4 · '+(s.revealed?'Đã kết thúc':(myReveal?'Bạn đã trả lời':'30 giây'));
+ $('studentImage').src=asset(q,visible?'original':'shadow');
+ $('studentChoices').innerHTML=names.map((n,i)=>`<button class="choice" data-answer="${i}" ${s.revealed||me?.answered||myReveal?'disabled':''}>${'ABCD'[i]}. ${n}</button>`).join('');
+ document.querySelectorAll('#studentChoices button').forEach(b=>b.onclick=()=>{
+   document.querySelectorAll('#studentChoices button').forEach(btn=>btn.disabled=true);
+   socket.emit('answer',{room,answer:Number(b.dataset.answer)});
+ });
+ if(myReveal){
+  $('studentMessage').textContent=(ownResult.correct?'✅ Chính xác! +'+ownResult.points+' điểm. ':'❌ Chưa đúng. ')+
+    'Đáp án: '+names[ownResult.correctAnswer]+'. Chờ giáo viên chuyển câu.';
+ }else if(s.revealed){
+  $('studentMessage').textContent='Đáp án: '+names[q]+(q===3?' · Đã hoàn thành!':'');
+ }else if(me?.answered){
+  $('studentMessage').textContent='Đang xác nhận kết quả...';
+ }else{
+  $('studentMessage').textContent='Hãy chọn đáp án trước khi hết 30 giây!';
+ }
+ if(visible)playMusic(q);else stopMusic();
+}
 if(student){document.body.classList.add('student');$('join').onclick=()=>{const name=$('studentName').value.trim();if(!name){alert('Vui lòng nhập tên');return}sessionStorage.setItem('studentName',name);socket.emit('join',{room,name})};socket.on('connect',()=>{const n=sessionStorage.getItem('studentName');if(n){$('studentName').value=n;socket.emit('join',{room,name:n})}})}
 else socket.on('connect',()=>socket.emit('create',{token:hostToken}));
+socket.on('answerResult',result=>{if(!student||!state||result.question!==state.question)return;ownResult=result;drawStudent(state)});
 socket.on('state',draw);socket.on('errorMessage',msg=>{alert(msg);$('message').textContent=msg});
 $('next').onclick=()=>{if(!student)socket.emit('next',{room,token:hostToken})};
 $('copy').onclick=()=>navigator.clipboard.writeText(location.origin+'/?room='+room).then(()=>$('copymsg').textContent='Đã sao chép liên kết!').catch(()=>$('copymsg').textContent=location.origin+'/?room='+room);
