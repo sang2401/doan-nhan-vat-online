@@ -1,12 +1,12 @@
 {
-  "name": "doan-nhan-vat-online",
+  "name": "nhan-vat-bi-an-online",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
   },
   "dependencies": {
     "express": "^4.21.2",
