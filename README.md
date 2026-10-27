@@ -19,3 +19,6 @@
 
 ## Chạy trên máy tính để thử
 Cài Node.js 20+, chạy `npm install`, `npm start`, mở http://localhost:3000. Link localhost không thể dùng từ điện thoại khác; cần triển khai HTTPS công khai để quét QR từ nhiều thiết bị.
+
+## Sửa lỗi khung QR trắng
+QR nay được tạo tại `/qr.svg?room=123456` trên chính máy chủ, không phụ thuộc CDN bên ngoài. Triển khai lại sau khi thay `server.js`, `package.json`, `public/index.html`, rồi tải lại trang bằng Ctrl+F5.
