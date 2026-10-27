@@ -1,5 +1,14 @@
 const express=require('express');const http=require('http');const {Server}=require('socket.io');const crypto=require('crypto');
-const app=express();app.use(express.static('public'));const server=http.createServer(app);const io=new Server(server,{maxHttpBufferSize:1e5});
+const QRCode=require('qrcode');
+const app=express();
+app.get('/qr.svg',async(req,res)=>{
+ const room=String(req.query.room||'');
+ if(!/^\d{6}$/.test(room))return res.status(400).send('Mã phòng không hợp lệ');
+ const proto=(req.get('x-forwarded-proto')||req.protocol).split(',')[0];
+ const joinUrl=proto+'://'+req.get('host')+'/?room='+room;
+ try{const svg=await QRCode.toString(joinUrl,{type:'svg',width:256,margin:2,errorCorrectionLevel:'M'});res.type('image/svg+xml').set('Cache-Control','no-store').send(svg)}
+ catch(err){res.status(500).send('Không tạo được mã QR')}
+});app.use(express.static('public'));const server=http.createServer(app);const io=new Server(server,{maxHttpBufferSize:1e5});
 const names=['Doraemon','Conan','Tom','Minion'];const rooms=new Map();const DURATION=20000;
 const uid=()=>crypto.randomBytes(12).toString('hex');
 function publicState(r){return {code:r.code,phase:r.phase,index:r.index,total:names.length,deadline:r.deadline,players:[...r.players.values()].map(p=>({name:p.name,score:p.score,time:p.time,answered:p.answered})),leaderboard:rank(r)}}
