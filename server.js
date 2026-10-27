@@ -7,7 +7,7 @@ const app=express();
 const server=http.createServer(app);
 const io=new Server(server);
 const rooms=new Map();
-const QUESTION_MS=20000;
+const QUESTION_MS=30000;
 app.use(express.static('public'));
 app.get('/health',(req,res)=>res.json({ok:true,rooms:rooms.size}));
 app.get('/qr.png',async(req,res)=>{
@@ -29,7 +29,6 @@ function reveal(r){
  if(r.timer){clearTimeout(r.timer);r.timer=null}
  send(r);
 }
-function allAnswered(r){return r.players.size>0&&[...r.players.values()].every(p=>p.answered)}
 io.on('connection',socket=>{
  socket.on('create',({token}={})=>{
   if(typeof token!=='string'||token.length<8)return;
@@ -43,21 +42,28 @@ io.on('connection',socket=>{
   if(!r)return socket.emit('errorMessage','Không tìm thấy phòng. Hãy quét lại QR mới.');
   if(!name)return socket.emit('errorMessage','Vui lòng nhập tên');
   socket.join(room);socket.data.playerRoom=room;
-  // Joining during a question does not retroactively require an answer from a new player.
-  const inProgress=r.question>=0&&!r.revealed;
-  r.players.set(socket.id,{id:socket.id,name,score:0,time:0,answered:inProgress});
+  // Học sinh vào trễ vẫn được trả lời trong thời gian còn lại của câu.
+  // Tuyệt đối không tự mở đáp án theo số người tham gia/đã trả lời.
+  r.players.set(socket.id,{id:socket.id,name,score:0,time:0,answered:false});
   send(r);
  });
  socket.on('next',({room,token}={})=>{
   const r=rooms.get(String(room));
   if(!r||r.token!==token||socket.data.host!==r.id)return;
+  // Không cho giáo viên bỏ qua câu đang diễn ra: các bạn khác còn thời gian trả lời.
+  if(r.question>=0&&!r.revealed)return;
   if(r.timer){clearTimeout(r.timer);r.timer=null}
-  r.question=(r.question+1)%4;
-  if(r.question===0){for(const p of r.players.values()){p.score=0;p.time=0}}
+  if(r.question===3){
+   // Chơi lại: trở về phòng chờ, giữ học sinh trong phòng nhưng xóa toàn bộ điểm.
+   r.question=-1;r.revealed=false;r.started=0;
+   for(const p of r.players.values()){p.score=0;p.time=0;p.answered=false}
+   send(r);return;
+  }
+  r.question+=1;
   r.revealed=false;r.started=Date.now();
   for(const p of r.players.values())p.answered=false;
-  const question=r.question;
-  r.timer=setTimeout(()=>{if(r.question===question)reveal(r)},QUESTION_MS);
+  const question=r.question, started=r.started;
+  r.timer=setTimeout(()=>{if(r.question===question&&r.started===started)reveal(r)},QUESTION_MS);
   send(r);
  });
  socket.on('answer',({room,answer}={})=>{
@@ -67,11 +73,12 @@ io.on('connection',socket=>{
   if(elapsed>=QUESTION_MS){reveal(r);return}
   p.answered=true;p.time+=elapsed;
   if(answer===r.question)p.score+=Math.max(100,1000-Math.floor(elapsed/100));
-  if(allAnswered(r))reveal(r);else send(r);
+  // Ghi nhận độc lập; không khóa câu của các học sinh khác.
+  send(r);
  });
  socket.on('disconnect',()=>{
   const r=rooms.get(socket.data.playerRoom);
-  if(r){r.players.delete(socket.id);if(r.question>=0&&!r.revealed&&allAnswered(r))reveal(r);else send(r)}
+  if(r){r.players.delete(socket.id);send(r)}
  });
 });
 server.listen(process.env.PORT||3000,()=>console.log('Game ready on port',process.env.PORT||3000));
