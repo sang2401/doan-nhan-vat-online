@@ -22,3 +22,7 @@ Cài Node.js 20+, chạy `npm install`, `npm start`, mở http://localhost:3000.
 
 ## Sửa lỗi khung QR trắng
 QR nay được tạo tại `/qr.svg?room=123456` trên chính máy chủ, không phụ thuộc CDN bên ngoài. Triển khai lại sau khi thay `server.js`, `package.json`, `public/index.html`, rồi tải lại trang bằng Ctrl+F5.
+
+
+## Sửa lỗi QR (bản PNG)
+Trang giáo viên sử dụng `/qr.png?room=123456`, máy chủ tạo QR PNG thực bằng package `qrcode`. Truy cập URL đó phải hiển thị các ô vuông QR đen trắng, không phải chuỗi URL dạng chữ. Khi sửa trên GitHub, cập nhật `server.js` và `public/index.html`, bấm Commit changes, đợi Render Live và Ctrl+Shift+R.
